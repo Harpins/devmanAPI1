@@ -1,0 +1,39 @@
+import requests
+from environs import Env
+from pprint import pprint
+
+
+def get_reviews(token):
+    url = "https://dvmn.org/api/user_reviews/"
+    response = requests.get(url, headers={"Authorization": token}, timeout=10)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_long_polling(token, timestamp=None):
+    url = "https://dvmn.org/api/long_polling/"
+    response = requests.get(
+        url,
+        headers={"Authorization": token},
+        params={"timestamp": timestamp},
+        timeout=5,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def main():
+    env = Env()
+    env.read_env()
+    token = env("AUTH_TOKEN")
+    while True:
+        try:
+            response = get_long_polling(token)
+            pprint(response)
+        except requests.exceptions.ReadTimeout:
+            print("Нет ответа, отправляем повторный запрос")
+            continue
+
+
+if __name__ == "__main__":
+    main()
