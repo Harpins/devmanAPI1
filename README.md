@@ -42,15 +42,6 @@ pip install -r requirements.txt
 ```bash
 python devmanapi.py
 ```
-### Альтернативные способы запуска
-
-Учетные данные также можно задать следующей командой:
-```bash
-python devmanapi.py \
-  --dvmn "токен Devman API" \
-  --bot "токен Telegram-бота" \
-  --chatid "ID чата, в который будут отправлены сообщения"
-```
 
 ## Цели проекта
 
