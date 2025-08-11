@@ -4,6 +4,8 @@ from environs import Env
 import telegram
 from telegram import ParseMode
 from telegram.ext import Updater, CommandHandler
+import logging
+
 
 
 def start_long_polling(token, timestamp, timeout=100):
@@ -41,6 +43,10 @@ def start(update, context):
 
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+    logger.info("Бот запускается")
+
     env = Env()
     env.read_env()
     dvmn_token = env.str("AUTH_TOKEN")
@@ -51,6 +57,7 @@ def main():
     updater = Updater(bot=bot, use_context=True)
     updater.dispatcher.add_handler(CommandHandler("start", start))
     updater.start_polling()
+    logger.info("Бот запущен")
     timestamp = None
     
     while True:
@@ -68,15 +75,19 @@ def main():
         except requests.exceptions.ReadTimeout:
             continue
         except requests.exceptions.ConnectionError:
-            print("Потеряно соединение с интернетом, пробуем переподключиться     ",
-                  end="\r", flush=True)
+            logger.error("Потеряно соединение с интернетом, пробуем переподключиться")
             sleep(10)
             continue
         except telegram.error.TelegramError as err:
-            print(f"Ошибка Telegram API {err.message}                              ",
-                  end="\r", flush=True)
+            logger.error(f"Ошибка Telegram API: {err.message}")
             continue
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logging.getLogger(__name__).info("Бот остановлен вручную")
+    except Exception as e:
+        logging.getLogger(__name__).critical(f"Критическая ошибка при запуске: {str(e)}")
+        raise
