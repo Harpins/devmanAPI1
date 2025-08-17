@@ -93,6 +93,7 @@ def main():
                 status = response.get("status")
                 if status == "timeout":
                     timestamp = response.get("timestamp_to_request")
+                    continue
                 if status == "found":
                     raw_results = response.get("new_attempts")
                     messages = make_bot_messages(raw_results)
@@ -100,6 +101,7 @@ def main():
                         bot.send_message(
                             chat_id=tg_chat_id, text=message, parse_mode=ParseMode.HTML
                         )
+                    timestamp = response.get("last_attempt_timestamp", timestamp)
             except requests.exceptions.ReadTimeout:
                 continue
             except requests.exceptions.ConnectionError:
