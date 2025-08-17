@@ -7,6 +7,27 @@ from telegram.ext import Updater, CommandHandler
 import logging
 
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
+
+
+class TelegramLogsHandler(logging.Handler):
+    def __init__(self, bot, chat_id):
+        super().__init__()
+        self.bot = bot
+        self.chat_id = chat_id
+
+    def emit(self, record):
+        log_entry = self.format(record)
+        try:
+            self.bot.send_message(
+                chat_id=self.chat_id,
+                text=f"<code>{log_entry}</code>",
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception:
+            pass
+
 
 def start_long_polling(token, timestamp, timeout=100):
     url = "https://dvmn.org/api/long_polling/"
@@ -29,7 +50,9 @@ def make_bot_messages(raw_results):
         if not all([title, is_negative, lesson_url]):
             raise ValueError("Изменилась форма ответа API")
 
-        lesson_status = "<b>вернулась с проверки</b>" if is_negative else "<b>принята</b>"
+        lesson_status = (
+            "<b>вернулась с проверки</b>" if is_negative else "<b>принята</b>"
+        )
         message = f'Работа\n<i>"{title}"</i>\n{lesson_status}\n<a href="{lesson_url}">Cсылка</a>'
         messages.append(message)
     return messages
@@ -37,15 +60,10 @@ def make_bot_messages(raw_results):
 
 def start(update, context):
     user = update.message.from_user
-    update.message.reply_text(
-        f"Добро пожаловать, {user.first_name}!\nБот запущен!"
-    )
+    update.message.reply_text(f"Добро пожаловать, {user.first_name}!\nБот запущен!")
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger(__name__)
-    logger.info("Бот запускается")
 
     env = Env()
     env.read_env()
@@ -54,40 +72,56 @@ def main():
     tg_chat_id = env.int("TG_CHAT_ID")
 
     bot = telegram.Bot(token=bot_token)
-    updater = Updater(bot=bot, use_context=True)
-    updater.dispatcher.add_handler(CommandHandler("start", start))
-    updater.start_polling()
-    logger.info("Бот запущен")
-    timestamp = None
-    
-    while True:
-        try:
-            response = start_long_polling(dvmn_token, timestamp)
-            status = response.get("status")
-            if status == "timeout":
-                timestamp = response.get("timestamp_to_request")
-            if status == "found":
-                raw_results = response.get("new_attempts")
-                messages = make_bot_messages(raw_results)
-                for message in messages:
-                    bot.send_message(chat_id=tg_chat_id,
-                                     text=message, parse_mode=ParseMode.HTML)
-        except requests.exceptions.ReadTimeout:
-            continue
-        except requests.exceptions.ConnectionError:
-            logger.error("Потеряно соединение с интернетом, пробуем переподключиться")
-            sleep(10)
-            continue
-        except telegram.error.TelegramError as err:
-            logger.error(f"Ошибка Telegram API: {err.message}")
-            continue
+
+    telegram_handler = TelegramLogsHandler(bot, tg_chat_id)
+    telegram_handler.setLevel(logging.ERROR)
+    logger.addHandler(telegram_handler)
+
+    logger.info("Бот запускается")
+
+    try:
+        updater = Updater(bot=bot, use_context=True)
+        updater.dispatcher.add_handler(CommandHandler("start", start))
+        updater.start_polling()
+
+        logger.info("Бот запущен")
+
+        timestamp = None
+        while True:
+            try:
+                response = start_long_polling(dvmn_token, timestamp)
+                status = response.get("status")
+                if status == "timeout":
+                    timestamp = response.get("timestamp_to_request")
+                if status == "found":
+                    raw_results = response.get("new_attempts")
+                    messages = make_bot_messages(raw_results)
+                    for message in messages:
+                        bot.send_message(
+                            chat_id=tg_chat_id, text=message, parse_mode=ParseMode.HTML
+                        )
+            except requests.exceptions.ReadTimeout:
+                continue
+            except requests.exceptions.ConnectionError:
+                logger.error(
+                    "Потеряно соединение с интернетом, пробуем переподключиться"
+                )
+                sleep(10)
+                continue
+            except telegram.error.TelegramError as err:
+                logger.error(f"Ошибка Telegram API: {err.message}")
+                continue
+
+    except Exception as err:
+        logger.critical(f"Критическая ошибка при работе бота: {err.message}")
+        raise
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        logging.getLogger(__name__).info("Бот остановлен вручную")
-    except Exception as e:
-        logging.getLogger(__name__).critical(f"Критическая ошибка при запуске: {str(e)}")
+        logger.info("Бот остановлен вручную")
+    except Exception as err:
+        logger.critical(f"Критическая ошибка при запуске: {str(err)}")
         raise
