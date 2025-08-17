@@ -34,7 +34,7 @@ def start_long_polling(token, timestamp, timeout=100):
     response = requests.get(
         url,
         headers={"Authorization": token},
-        params={"timestamp": timestamp},
+        params={"timestamp": timestamp or ""},
         timeout=timeout,
     )
     response.raise_for_status()
@@ -92,16 +92,19 @@ def main():
                 response = start_long_polling(dvmn_token, timestamp)
                 status = response.get("status")
                 if status == "timeout":
-                    timestamp = response.get("timestamp_to_request")
+                    timestamp = response.get("timestamp_to_request", timestamp)
                     continue
                 if status == "found":
-                    raw_results = response.get("new_attempts")
+                    raw_results = response.get("new_attempts", [])
                     messages = make_bot_messages(raw_results)
                     for message in messages:
                         bot.send_message(
                             chat_id=tg_chat_id, text=message, parse_mode=ParseMode.HTML
                         )
                     timestamp = response.get("last_attempt_timestamp", timestamp)
+                    sleep(5)
+                    continue
+
             except requests.exceptions.ReadTimeout:
                 continue
             except requests.exceptions.ConnectionError:
