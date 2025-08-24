@@ -64,7 +64,6 @@ def start(update, context):
 
 
 def main():
-
     env = Env()
     env.read_env()
     dvmn_token = env.str("AUTH_TOKEN")
@@ -79,47 +78,40 @@ def main():
 
     logger.info("Бот запускается")
 
-    try:
-        updater = Updater(bot=bot, use_context=True)
-        updater.dispatcher.add_handler(CommandHandler("start", start))
-        updater.start_polling()
+    updater = Updater(bot=bot, use_context=True)
+    updater.dispatcher.add_handler(CommandHandler("start", start))
+    updater.start_polling()
 
-        logger.info("Бот запущен")
+    logger.info("Бот запущен")
 
-        timestamp = None
-        while True:
-            try:
-                response = start_long_polling(dvmn_token, timestamp)
-                status = response.get("status")
-                if status == "timeout":
-                    timestamp = response.get("timestamp_to_request", timestamp)
-                    continue
-                if status == "found":
-                    raw_results = response.get("new_attempts", [])
-                    messages = make_bot_messages(raw_results)
-                    for message in messages:
-                        bot.send_message(
-                            chat_id=tg_chat_id, text=message, parse_mode=ParseMode.HTML
-                        )
-                    timestamp = response.get("last_attempt_timestamp", timestamp)
-                    sleep(5)
-                    continue
-
-            except requests.exceptions.ReadTimeout:
+    timestamp = None
+    while True:
+        try:
+            response = start_long_polling(dvmn_token, timestamp)
+            status = response.get("status")
+            if status == "timeout":
+                timestamp = response.get("timestamp_to_request", timestamp)
                 continue
-            except requests.exceptions.ConnectionError:
-                logger.error(
-                    "Потеряно соединение с интернетом, пробуем переподключиться"
-                )
-                sleep(10)
-                continue
-            except telegram.error.TelegramError as err:
-                logger.error(f"Ошибка Telegram API: {err.message}")
+            if status == "found":
+                raw_results = response.get("new_attempts", [])
+                messages = make_bot_messages(raw_results)
+                for message in messages:
+                    bot.send_message(
+                        chat_id=tg_chat_id, text=message, parse_mode=ParseMode.HTML
+                    )
+                timestamp = response.get("last_attempt_timestamp", timestamp)
+                sleep(5)
                 continue
 
-    except Exception as err:
-        logger.critical(f"Критическая ошибка при работе бота: {err.message}")
-        raise
+        except requests.exceptions.ReadTimeout:
+            continue
+        except requests.exceptions.ConnectionError:
+            logger.error("Потеряно соединение с интернетом, пробуем переподключиться")
+            sleep(10)
+            continue
+        except telegram.error.TelegramError:
+            logger.exception("Ошибка Telegram API", exc_info=True)
+            continue
 
 
 if __name__ == "__main__":
@@ -127,6 +119,5 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         logger.info("Бот остановлен вручную")
-    except Exception as err:
-        logger.critical(f"Критическая ошибка при запуске: {str(err)}")
-        raise
+    except Exception:
+        logger.exception("Критическая ошибка при при работе бота", exc_info=True)
